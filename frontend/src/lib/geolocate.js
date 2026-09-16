@@ -37,6 +37,24 @@ export async function detectLocation(lang = "en") {
   return { lat: pos.lat, lng: pos.lng, ...place };
 }
 
+// Forward geocode: turn a typed city/place name into coordinates (free OSM Nominatim).
+export async function geocodeCity(query) {
+  const q = (query || "").trim();
+  if (!q) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+    if (!res.ok) throw new Error("geocode_failed");
+    const arr = await res.json();
+    if (!arr || !arr.length) return null;
+    const hit = arr[0];
+    const name = (hit.display_name || q).split(",")[0].trim();
+    return { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon), city: name };
+  } catch {
+    return null;
+  }
+}
+
 // Format a distance (in km) into a short, localized "X km / X m away" string.
 export function formatDistance(km, t, lang) {
   if (km == null || isNaN(km)) return null;

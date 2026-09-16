@@ -426,6 +426,7 @@ class ProfileUpdate(BaseModel):
     country: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
+    hide_distance: Optional[bool] = None
     interests: Optional[List[str]] = None
     photos: Optional[List[str]] = None
     language: Optional[str] = None
@@ -826,6 +827,8 @@ async def me(user=Depends(get_current_user)):
 @api.patch("/auth/me")
 async def update_me(patch: ProfileUpdate, user=Depends(get_current_user)):
     upd = {k: v for k, v in patch.model_dump().items() if v is not None}
+    if "hide_distance" in upd and upd["hide_distance"] and not is_vip(user):
+        raise HTTPException(403, "VIP_REQUIRED")
     if "height" in upd and not (100 <= upd["height"] <= 250): raise HTTPException(400, "Height must be 100-250 cm")
     if "weight" in upd and not (30 <= upd["weight"] <= 300): raise HTTPException(400, "Weight must be 30-300 kg")
     if "date_price" in upd:
@@ -1102,6 +1105,12 @@ def haversine_km(lat1, lng1, lat2, lng2):
     except Exception:
         return None
 
+def visible_distance(vlat, vlng, target: dict):
+    """Distance in km from a viewer to a target, honoring the target's hide_distance privacy flag."""
+    if target.get("hide_distance"):
+        return None
+    return haversine_km(vlat, vlng, target.get("lat"), target.get("lng"))
+
 @api.get("/profiles")
 async def list_profiles(
     q: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
@@ -1114,6 +1123,7 @@ async def list_profiles(
     premium_only: bool = False, vip_only: bool = False, with_photos: bool = False, verified_only: bool = False, online_now: bool = False,
     vip_categories: Optional[str] = None, vip_min_price: Optional[int] = None, vip_max_price: Optional[int] = None, vip_date: Optional[str] = None,
     max_distance: Optional[int] = None, sort: Optional[str] = None,
+    origin_lat: Optional[float] = None, origin_lng: Optional[float] = None,
     limit: int = 40, user=Depends(get_current_user)
 ):
     conds = [{"id": {"$ne": user["id"]}}, {"age": {"$gte": min_age, "$lte": max_age}}]
@@ -1182,15 +1192,17 @@ async def list_profiles(
             v = p.get("vip") or {}
             if v.get("post_mode") == "separate" and not v.get("show_on_main", True):
                 p["is_vip"] = False
-    # Distance from the viewer to each profile (km). Exact coords are never exposed.
-    vlat, vlng = user.get("lat"), user.get("lng")
+    # Distance from the viewer (or a Travel-mode origin) to each profile (km). Exact coords are never exposed.
+    vlat = origin_lat if origin_lat is not None else user.get("lat")
+    vlng = origin_lng if origin_lng is not None else user.get("lng")
     for p in results:
-        d = haversine_km(vlat, vlng, p.get("lat"), p.get("lng"))
+        d = visible_distance(vlat, vlng, p)
         if d is not None:
             p["distance_km"] = d
         p.pop("lat", None)
         p.pop("lng", None)
-    # Radius filter: only keep profiles within max_distance km (requires viewer + target coords)
+        p.pop("hide_distance", None)
+    # Radius filter: only keep profiles within max_distance km (requires origin + target coords)
     if max_distance and vlat is not None and vlng is not None:
         results = [p for p in results if p.get("distance_km") is not None and p["distance_km"] <= max_distance]
     # Nearby sort: closest first (profiles without a distance go last)
@@ -1253,15 +1265,16 @@ async def profile_detail(pid: str, user=Depends(get_current_user)):
         g = await db.users.find_one({"id": a["_id"]}, {"_id": 0, "id": 1, "name": 1, "photos": 1})
         if g: top.append({"id": g["id"], "name": g["name"], "photo": (g.get("photos") or [None])[0], "total": a["total"], "count": a["count"]})
     p["top_givers"] = top
-    d = haversine_km(user.get("lat"), user.get("lng"), p.get("lat"), p.get("lng"))
+    d = visible_distance(user.get("lat"), user.get("lng"), p)
     if d is not None:
         p["distance_km"] = d
     # Approximate location for a map preview: rounded to ~1 decimal (~11 km grid) to protect privacy
-    if p.get("lat") is not None and p.get("lng") is not None:
+    if not p.get("hide_distance") and p.get("lat") is not None and p.get("lng") is not None:
         p["approx_lat"] = round(float(p["lat"]), 1)
         p["approx_lng"] = round(float(p["lng"]), 1)
     p.pop("lat", None)
     p.pop("lng", None)
+    p.pop("hide_distance", None)
     return p
 
 # ---------- Likes / Matches ----------
@@ -1356,7 +1369,14 @@ async def my_matches(user=Depends(get_current_user)):
     for m in matches:
         other_id = [u for u in m["users"] if u != user["id"]][0]
         other = await db.users.find_one({"id": other_id}, {"_id": 0, "password": 0, "email": 0})
-        if other: result.append({"conversation_id": m["id"], "user": other, "created_at": m["created_at"], "can_share_media": await have_met(user["id"], other_id)})
+        if other:
+            d = visible_distance(user.get("lat"), user.get("lng"), other)
+            if d is not None:
+                other["distance_km"] = d
+            other.pop("lat", None)
+            other.pop("lng", None)
+            other.pop("hide_distance", None)
+            result.append({"conversation_id": m["id"], "user": other, "created_at": m["created_at"], "can_share_media": await have_met(user["id"], other_id)})
     return result
 
 @api.post("/conversations/{cid}/photo")

@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
-import { Heart, Sparkles, Crown, Lock } from "lucide-react";
+import { formatDistance } from "../lib/geolocate";
+import { Heart, Sparkles, Crown, Lock, MapPin } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
@@ -65,6 +66,11 @@ export default function Matches() {
                 <div>
                   <div className="font-serif-luxe text-xl">{m.user.name}, {m.user.age}</div>
                   <div className="text-xs text-slate-400">{m.user.city}, {m.user.country}</div>
+                  {m.user.distance_km != null && (
+                    <span data-testid={`match-distance-${m.user.id}`} className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/30 text-[10px] text-sky-200">
+                      <MapPin size={9} /> {formatDistance(m.user.distance_km, t, lang)}
+                    </span>
+                  )}
                 </div>
               </button>
             ))}

@@ -150,7 +150,8 @@ export default function ProfileView() {
                     src={`https://www.openstreetmap.org/export/embed.html?bbox=${p.approx_lng - 0.35}%2C${p.approx_lat - 0.22}%2C${p.approx_lng + 0.35}%2C${p.approx_lat + 0.22}&layer=mapnik&marker=${p.approx_lat}%2C${p.approx_lng}`}
                   />
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <span className="w-16 h-16 rounded-full bg-sky-500/15 border border-sky-400/40 animate-ping" />
+                    <span data-testid="profile-view-map-radius" className="block rounded-full bg-sky-400/15 border-2 border-sky-400/50 shadow-[0_0_30px_-4px_rgba(56,189,248,0.6)]" style={{ height: "46%", aspectRatio: "1 / 1" }} />
+                    <span className="absolute w-2.5 h-2.5 rounded-full bg-sky-400 border border-white/70 shadow" />
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">

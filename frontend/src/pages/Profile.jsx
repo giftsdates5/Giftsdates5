@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShieldCheck, Trash2, Eye, EyeOff, MapPin, Loader2 } from "lucide-react";
+import { ShieldCheck, Trash2, Eye, EyeOff, MapPin, Loader2, Lock } from "lucide-react";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
@@ -9,6 +9,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
 import { toast } from "sonner";
 import PhotoGrid from "../components/PhotoGrid";
 import ProfileDetailsForm from "../components/ProfileDetailsForm";
@@ -23,8 +24,9 @@ export default function Profile() {
   const { user, refreshUser, lang, meta, logout } = useApp();
   const nav = useNavigate();
   const isPremium = user?.premium_until && new Date(user.premium_until) > new Date();
+  const isVip = user?.vip_until && new Date(user.vip_until) > new Date();
   const [f, setF] = useState(() => ({ name: user?.name, age: user?.age, bio: user?.bio, city: user?.city, country: user?.country,
-    lat: user?.lat ?? null, lng: user?.lng ?? null,
+    lat: user?.lat ?? null, lng: user?.lng ?? null, hide_distance: user?.hide_distance ?? false,
     ...Object.fromEntries(DETAIL_KEYS.map(k => [k, user?.[k] ?? null])) }));
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -117,6 +119,25 @@ export default function Profile() {
               <MapPin size={11} /> {Number(f.lat).toFixed(3)}, {Number(f.lng).toFixed(3)}
             </p>
           )}
+          <div className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isVip ? "border-sky-500/30 bg-sky-500/5" : "border-white/10 bg-white/5"}`} data-testid="profile-hide-distance-row">
+            <div className="min-w-0">
+              <div className="text-sm text-slate-200 flex items-center gap-2">
+                {isVip ? <MapPin size={15} className="text-sky-300 shrink-0" /> : <Lock size={14} className="text-amber-300 shrink-0" />}
+                {t("hide_distance", lang)}
+                {!isVip && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/40 text-red-200">{t("hide_distance_vip", lang)}</span>}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">{t("hide_distance_hint", lang)}</p>
+            </div>
+            <Switch
+              data-testid="profile-hide-distance-switch"
+              checked={!!f.hide_distance}
+              disabled={!isVip}
+              onCheckedChange={v => {
+                if (!isVip) { toast.error(t("hide_distance_vip", lang), { action: { label: "VIP", onClick: () => nav("/wallet?premium=1") } }); return; }
+                setF({ ...f, hide_distance: v });
+              }}
+            />
+          </div>
           <div><Label className="text-xs text-slate-400">{t("bio", lang)}</Label>
             <Textarea data-testid="profile-bio-input" rows={4} value={f.bio || ""} onChange={e => setF({ ...f, bio: e.target.value })} className="bg-white/5 border-white/10 mt-1"/></div>
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">

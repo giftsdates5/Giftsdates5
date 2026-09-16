@@ -13,12 +13,13 @@ import VideoCallModal from "../components/VideoCallModal";
 import DateBookingModal from "../components/DateBookingModal";
 import InviteDateModal from "../components/InviteDateModal";
 import FeedBar from "../components/FeedBar";
-import { Search, SlidersHorizontal, ChevronDown, Crown, Lock, Navigation } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronDown, Crown, Lock, Navigation, Plane, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { INTENTS, KIDS, HABITS, RELIGIONS, INCOMES, BUST, SIZES, GENDERS, ORIENTATIONS, optLabel } from "../components/ProfileDetailsForm";
 import { VIP_CATEGORIES, catTitle } from "../lib/vipCatalog";
 import { LANGUAGES } from "../lib/i18n";
 import { Switch } from "../components/ui/switch";
+import { geocodeCity } from "../lib/geolocate";
 
 const ALL = "all";
 const RADII = [5, 10, 25, 50, 100, 250];
@@ -69,13 +70,31 @@ export default function Browse() {
   const [target, setTarget] = useState(null);
   const [modal, setModal] = useState(null);
   const [quota, setQuota] = useState(null);
+  const [travel, setTravel] = useState(null); // { lat, lng, city }
+  const [travelInput, setTravelInput] = useState("");
+  const [travelBusy, setTravelBusy] = useState(false);
   const loadQuota = () => api.get("/likes/quota").then(r => setQuota(r.data)).catch(() => {});
   useEffect(() => { loadQuota(); }, []);
+
+  const setTravelMode = async () => {
+    const q = travelInput.trim();
+    if (!q) return;
+    setTravelBusy(true);
+    try {
+      const res = await geocodeCity(q);
+      if (!res) { toast.error(t("travel_not_found", lang)); return; }
+      setTravel(res);
+      toast.success(t("travel_active", lang).replace("{city}", res.city));
+    } catch { toast.error(t("travel_not_found", lang)); }
+    finally { setTravelBusy(false); }
+  };
+  const clearTravel = () => { setTravel(null); setTravelInput(""); };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = { ...filters };
+      if (travel) { params.origin_lat = travel.lat; params.origin_lng = travel.lng; }
       if (Array.isArray(params.vip_categories)) { if (params.vip_categories.length) params.vip_categories = params.vip_categories.join(","); else delete params.vip_categories; }
       Object.keys(params).forEach(k => (params[k] === ALL || params[k] === "" || params[k] == null || params[k] === false) && delete params[k]);
       const { data } = await api.get("/profiles", { params });
@@ -86,7 +105,7 @@ export default function Browse() {
       else toast.error(t("failed_load", lang));
     }
     finally { setLoading(false); }
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, travel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -141,8 +160,8 @@ export default function Browse() {
           </div>
           <div className="min-w-[130px]">
             <label className="text-xs text-slate-400">{t("distance_label", lang)}</label>
-            <Select value={filters.max_distance ? String(filters.max_distance) : ALL} onValueChange={v => setFilters({ ...filters, max_distance: v === ALL ? "" : parseInt(v) })} disabled={!hasCoords}>
-              <SelectTrigger data-testid="profile-distance-filter-select" className="bg-white/5 border-white/10 mt-1" title={!hasCoords ? t("location_needed_for_distance", lang) : undefined}><SelectValue /></SelectTrigger>
+            <Select value={filters.max_distance ? String(filters.max_distance) : ALL} onValueChange={v => setFilters({ ...filters, max_distance: v === ALL ? "" : parseInt(v) })} disabled={!hasCoords && !travel}>
+              <SelectTrigger data-testid="profile-distance-filter-select" className="bg-white/5 border-white/10 mt-1" title={(!hasCoords && !travel) ? t("location_needed_for_distance", lang) : undefined}><SelectValue /></SelectTrigger>
               <SelectContent className="bg-[#161320] border-white/10 text-white">
                 <SelectItem value={ALL}>{t("any_distance", lang)}</SelectItem>
                 {RADII.map(r => <SelectItem key={r} value={String(r)}>{t("within_km", lang).replace("{n}", r)}</SelectItem>)}
@@ -152,8 +171,8 @@ export default function Browse() {
           <button
             type="button"
             data-testid="profile-sort-nearby-toggle"
-            disabled={!hasCoords}
-            title={!hasCoords ? t("location_needed_for_distance", lang) : undefined}
+            disabled={!hasCoords && !travel}
+            title={(!hasCoords && !travel) ? t("location_needed_for_distance", lang) : undefined}
             onClick={() => setFilters(f => ({ ...f, sort: f.sort === "nearby" ? "" : "nearby" }))}
             className={`h-[38px] mt-auto inline-flex items-center gap-1.5 px-3 rounded-lg text-xs border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${filters.sort === "nearby" ? "bg-sky-500/20 border-sky-500/50 text-sky-200" : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"}`}
           >
@@ -168,6 +187,36 @@ export default function Browse() {
             <button data-testid="likes-quota-badge" onClick={() => nav("/wallet?premium=1")} className={`ms-auto px-3 py-2 rounded-full text-xs border font-mono-num ${quota.remaining === 0 ? "bg-rose-500/15 border-rose-500/40 text-rose-300" : "bg-white/5 border-white/10 text-slate-300"}`}>
               💗 {t("likes_left", lang).replace("{a}", quota.used).replace("{b}", quota.limit)}
             </button>
+          )}
+        </div>
+        <div className="glass rounded-2xl p-3 mb-6 flex flex-wrap items-center gap-3" data-testid="travel-mode-bar">
+          <div className="flex items-center gap-2 text-sm text-sky-200 shrink-0">
+            <Plane size={16} className="text-sky-300" /> <span className="font-medium">{t("travel_mode", lang)}</span>
+          </div>
+          {travel ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span data-testid="travel-mode-active" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/20 border border-sky-500/50 text-sky-100 text-xs">
+                <Navigation size={12} /> {t("travel_active", lang).replace("{city}", travel.city)}
+              </span>
+              <button data-testid="travel-mode-clear" type="button" onClick={clearTravel} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors">
+                <X size={12} /> {t("travel_clear", lang)}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+              <Input
+                data-testid="travel-mode-input"
+                value={travelInput}
+                onChange={e => setTravelInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") setTravelMode(); }}
+                placeholder={t("travel_destination", lang)}
+                className="bg-white/5 border-white/10 h-9 max-w-[280px]"
+              />
+              <Button data-testid="travel-mode-set" onClick={setTravelMode} disabled={travelBusy || !travelInput.trim()} className="h-9 bg-sky-600 hover:bg-sky-500 text-white border-0">
+                {travelBusy ? "…" : t("travel_set", lang)}
+              </Button>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">{t("travel_mode_hint", lang)}</span>
+            </div>
           )}
         </div>
         {showMore && (

@@ -3,9 +3,10 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
+import { formatDistance } from "../lib/geolocate";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Send, ShieldAlert, Gift, Camera, Lock } from "lucide-react";
+import { Send, ShieldAlert, Gift, Camera, Lock, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import GiftModal from "../components/GiftModal";
 import { fileUrl } from "../lib/api";
@@ -81,7 +82,10 @@ export default function Chats() {
               <div className="relative"><Avatar u={c.user} testid={`chat-avatar-${c.user.id}`} /><PresenceDot u={c.user} lang={lang} className="absolute bottom-0 right-0" testid={`chat-presence-${c.user.id}`} /></div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{c.user.name}</div>
-                <div className="text-xs text-slate-400 truncate">{c.user.city}</div>
+                <div className="text-xs text-slate-400 truncate flex items-center gap-1.5">
+                  <span className="truncate">{c.user.city}</span>
+                  {c.user.distance_km != null && <span data-testid={`chat-distance-${c.user.id}`} className="shrink-0 inline-flex items-center gap-0.5 text-sky-300"><MapPin size={9} /> {formatDistance(c.user.distance_km, t, lang)}</span>}
+                </div>
               </div>
             </button>
           ))}

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShieldCheck, Trash2, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, Trash2, Eye, EyeOff, MapPin, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { t } from "../lib/i18n";
+import { detectLocation } from "../lib/geolocate";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -23,9 +24,24 @@ export default function Profile() {
   const nav = useNavigate();
   const isPremium = user?.premium_until && new Date(user.premium_until) > new Date();
   const [f, setF] = useState(() => ({ name: user?.name, age: user?.age, bio: user?.bio, city: user?.city, country: user?.country,
+    lat: user?.lat ?? null, lng: user?.lng ?? null,
     ...Object.fromEntries(DETAIL_KEYS.map(k => [k, user?.[k] ?? null])) }));
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [soundOn, setSoundOn] = useState(localStorage.getItem("gd_sound") !== "off");
+
+  const detectMyLocation = async () => {
+    setLocating(true);
+    try {
+      const { lat, lng, city, country } = await detectLocation(lang);
+      setF((prev) => ({ ...prev, lat, lng, city: city || prev.city, country: country || prev.country }));
+      toast.success(t("location_detected", lang) + (city ? ` · ${city}${country ? ", " + country : ""}` : ""));
+    } catch {
+      toast.error(t("location_failed", lang));
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const cancelSubscription = async () => {
     if (!window.confirm(t("cancel_sub_confirm", lang))) return;
@@ -86,6 +102,21 @@ export default function Profile() {
             <div><Label className="text-xs text-slate-400">{t("city", lang)}</Label>
               <CityField testid="profile-city-input" value={f.city} onChange={v => setF({ ...f, city: v })} lang={lang} /></div>
           </div>
+          <button
+            type="button"
+            data-testid="profile-detect-location-button"
+            onClick={detectMyLocation}
+            disabled={locating}
+            className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-200 text-sm hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+          >
+            {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
+            {locating ? t("detecting_location", lang) : t("detect_location", lang)}
+          </button>
+          {f.lat != null && f.lng != null && (
+            <p data-testid="profile-location-coords" className="text-[11px] text-emerald-300/80 flex items-center gap-1 -mt-1">
+              <MapPin size={11} /> {Number(f.lat).toFixed(3)}, {Number(f.lng).toFixed(3)}
+            </p>
+          )}
           <div><Label className="text-xs text-slate-400">{t("bio", lang)}</Label>
             <Textarea data-testid="profile-bio-input" rows={4} value={f.bio || ""} onChange={e => setF({ ...f, bio: e.target.value })} className="bg-white/5 border-white/10 mt-1"/></div>
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">

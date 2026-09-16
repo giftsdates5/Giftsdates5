@@ -13,7 +13,7 @@ import VideoCallModal from "../components/VideoCallModal";
 import DateBookingModal from "../components/DateBookingModal";
 import InviteDateModal from "../components/InviteDateModal";
 import FeedBar from "../components/FeedBar";
-import { Search, SlidersHorizontal, ChevronDown, Crown, Lock } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronDown, Crown, Lock, Navigation } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { INTENTS, KIDS, HABITS, RELIGIONS, INCOMES, BUST, SIZES, GENDERS, ORIENTATIONS, optLabel } from "../components/ProfileDetailsForm";
 import { VIP_CATEGORIES, catTitle } from "../lib/vipCatalog";
@@ -21,6 +21,7 @@ import { LANGUAGES } from "../lib/i18n";
 import { Switch } from "../components/ui/switch";
 
 const ALL = "all";
+const RADII = [5, 10, 25, 50, 100, 250];
 const EXTRA_DEFAULT = { intent: ALL, kids: ALL, smoking: ALL, drinking: ALL, religion: ALL, income: ALL, language: ALL, bust_size: ALL, penis_size: ALL, orientation: ALL,
   min_height: "", max_height: "", min_weight: "", max_weight: "", hobby: "", job: "", max_date_price: "", premium_only: false, vip_only: false, with_photos: false, verified_only: false, online_now: false,
   vip_categories: [], vip_min_price: "", vip_max_price: "", vip_date: "" };
@@ -58,11 +59,12 @@ function Toggle({ testid, label, checked, onChange }) {
 export default function Browse() {
   const { lang, user } = useApp();
   const isPremium = user?.premium_until && new Date(user.premium_until) > new Date();
+  const hasCoords = user?.lat != null && user?.lng != null;
   const isVip = user?.vip_until && new Date(user.vip_until) > new Date();
   const nav = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: "", city: "", country: "", gender: "all", min_age: 18, max_age: 60, ...EXTRA_DEFAULT });
+  const [filters, setFilters] = useState({ q: "", city: "", country: "", gender: "all", min_age: 18, max_age: 60, max_distance: "", sort: "", ...EXTRA_DEFAULT });
   const [showMore, setShowMore] = useState(false);
   const [target, setTarget] = useState(null);
   const [modal, setModal] = useState(null);
@@ -137,6 +139,26 @@ export default function Browse() {
             <label className="text-xs text-slate-400">Max {t("age", lang)}</label>
             <Input data-testid="profile-max-age-input" type="number" min="18" max="99" value={filters.max_age} onChange={e => setFilters({ ...filters, max_age: parseInt(e.target.value||99) })} className="bg-white/5 border-white/10 mt-1" />
           </div>
+          <div className="min-w-[130px]">
+            <label className="text-xs text-slate-400">{t("distance_label", lang)}</label>
+            <Select value={filters.max_distance ? String(filters.max_distance) : ALL} onValueChange={v => setFilters({ ...filters, max_distance: v === ALL ? "" : parseInt(v) })} disabled={!hasCoords}>
+              <SelectTrigger data-testid="profile-distance-filter-select" className="bg-white/5 border-white/10 mt-1" title={!hasCoords ? t("location_needed_for_distance", lang) : undefined}><SelectValue /></SelectTrigger>
+              <SelectContent className="bg-[#161320] border-white/10 text-white">
+                <SelectItem value={ALL}>{t("any_distance", lang)}</SelectItem>
+                {RADII.map(r => <SelectItem key={r} value={String(r)}>{t("within_km", lang).replace("{n}", r)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <button
+            type="button"
+            data-testid="profile-sort-nearby-toggle"
+            disabled={!hasCoords}
+            title={!hasCoords ? t("location_needed_for_distance", lang) : undefined}
+            onClick={() => setFilters(f => ({ ...f, sort: f.sort === "nearby" ? "" : "nearby" }))}
+            className={`h-[38px] mt-auto inline-flex items-center gap-1.5 px-3 rounded-lg text-xs border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${filters.sort === "nearby" ? "bg-sky-500/20 border-sky-500/50 text-sky-200" : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"}`}
+          >
+            <Navigation size={13} /> {t("sort_nearby", lang)}
+          </button>
           <Button data-testid="profile-search-submit-button" onClick={load} className="rose-btn text-white border-0"><SlidersHorizontal size={14} className="me-1"/> {t("filters", lang)}</Button>
           <label className="flex items-center gap-2 text-xs text-red-200 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 cursor-pointer h-[38px]" data-testid="main-vip-only-wrap">
             <Switch data-testid="main-filter-vip-only" checked={filters.vip_only} onCheckedChange={v => setFilters({ ...filters, vip_only: v })} /> ♛ {t("vip_only", lang)}

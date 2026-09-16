@@ -138,6 +138,28 @@ export default function ProfileView() {
 
             {p.bio && <div className="glass rounded-2xl p-5"><h3 className="font-serif-luxe text-xl mb-2">{t("about_me", lang)}</h3><p className="text-sm text-slate-300 whitespace-pre-line" data-testid="profile-view-bio">{p.bio}</p></div>}
 
+            {p.approx_lat != null && p.approx_lng != null && (
+              <div className="glass rounded-2xl p-5" data-testid="profile-view-map">
+                <h3 className="font-serif-luxe text-xl mb-3 flex items-center gap-2"><MapPin size={18} className="text-sky-300" /> {t("map_approx_area", lang)}</h3>
+                <div className="rounded-xl overflow-hidden border border-white/10 relative">
+                  <iframe
+                    title="approx-area"
+                    data-testid="profile-view-map-iframe"
+                    className="w-full h-56 grayscale-[0.15] contrast-110"
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${p.approx_lng - 0.35}%2C${p.approx_lat - 0.22}%2C${p.approx_lng + 0.35}%2C${p.approx_lat + 0.22}&layer=mapnik&marker=${p.approx_lat}%2C${p.approx_lng}`}
+                  />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="w-16 h-16 rounded-full bg-sky-500/15 border border-sky-400/40 animate-ping" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+                  <MapPin size={11} /> {p.city}, {p.country}
+                  {p.distance_km != null && <span className="text-sky-300">· {formatDistance(p.distance_km, t, lang)}</span>}
+                </p>
+              </div>
+            )}
+
             {p.gifts_count > 0 && (
               <div className="glass rounded-2xl p-5" data-testid="profile-view-top-givers">
                 <div className="flex items-center justify-between mb-3">

@@ -1113,6 +1113,7 @@ async def list_profiles(
     bust_size: Optional[str] = None, penis_size: Optional[str] = None, max_date_price: Optional[int] = None,
     premium_only: bool = False, vip_only: bool = False, with_photos: bool = False, verified_only: bool = False, online_now: bool = False,
     vip_categories: Optional[str] = None, vip_min_price: Optional[int] = None, vip_max_price: Optional[int] = None, vip_date: Optional[str] = None,
+    max_distance: Optional[int] = None, sort: Optional[str] = None,
     limit: int = 40, user=Depends(get_current_user)
 ):
     conds = [{"id": {"$ne": user["id"]}}, {"age": {"$gte": min_age, "$lte": max_age}}]
@@ -1189,6 +1190,12 @@ async def list_profiles(
             p["distance_km"] = d
         p.pop("lat", None)
         p.pop("lng", None)
+    # Radius filter: only keep profiles within max_distance km (requires viewer + target coords)
+    if max_distance and vlat is not None and vlng is not None:
+        results = [p for p in results if p.get("distance_km") is not None and p["distance_km"] <= max_distance]
+    # Nearby sort: closest first (profiles without a distance go last)
+    if sort == "nearby" and vlat is not None and vlng is not None:
+        results.sort(key=lambda p: p.get("distance_km") if p.get("distance_km") is not None else float("inf"))
     return results
 
 def _vip_listing_card(p: dict) -> dict:
@@ -1249,6 +1256,10 @@ async def profile_detail(pid: str, user=Depends(get_current_user)):
     d = haversine_km(user.get("lat"), user.get("lng"), p.get("lat"), p.get("lng"))
     if d is not None:
         p["distance_km"] = d
+    # Approximate location for a map preview: rounded to ~1 decimal (~11 km grid) to protect privacy
+    if p.get("lat") is not None and p.get("lng") is not None:
+        p["approx_lat"] = round(float(p["lat"]), 1)
+        p["approx_lng"] = round(float(p["lng"]), 1)
     p.pop("lat", None)
     p.pop("lng", None)
     return p

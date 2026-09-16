@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { api, fileUrl } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { LANGUAGES, t } from "../lib/i18n";
+import { formatDistance } from "../lib/geolocate";
 import { optLabel } from "../components/ProfileDetailsForm";
 import GiftModal from "../components/GiftModal";
 import { ReportModal } from "../components/ReportModal";
@@ -90,7 +91,7 @@ export default function ProfileView() {
           <div className="space-y-6">
             <div>
               <h1 className="font-serif-luxe text-4xl sm:text-5xl flex items-center gap-3" data-testid="profile-view-name">{p.name}, {p.age} {p.verified && <BadgeCheck className="text-amber-300" size={24} />}</h1>
-              <p className="text-slate-400 flex items-center gap-1 mt-1"><MapPin size={14} /> {p.city}, {p.country} {p.last_seen && <span className="ms-2 inline-flex items-center gap-1.5 text-xs" data-testid="profile-view-presence"><PresenceDot u={p} lang={lang} />{presence(p, lang).label}</span>}</p>
+              <p className="text-slate-400 flex items-center gap-1 mt-1"><MapPin size={14} /> {p.city}, {p.country} {p.distance_km != null && <span data-testid="profile-view-distance" className="ms-2 text-sky-300 text-sm">· {formatDistance(p.distance_km, t, lang)}</span>} {p.last_seen && <span className="ms-2 inline-flex items-center gap-1.5 text-xs" data-testid="profile-view-presence"><PresenceDot u={p} lang={lang} />{presence(p, lang).label}</span>}</p>
               {(Array.isArray(p.relationship_intent) ? p.relationship_intent : (p.relationship_intent ? [p.relationship_intent] : [])).length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2" data-testid="profile-view-intent">
                   {(Array.isArray(p.relationship_intent) ? p.relationship_intent : [p.relationship_intent]).map(iv => (

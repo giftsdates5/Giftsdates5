@@ -104,7 +104,27 @@
 
 user_problem_statement: "Allow users to post 2 profiles: a main profile and a VIP profile posted separately (fully independent anonymous listing with own photos/age/city/nickname, appearing only in the VIP section as its own card, with an option to show/hide VIP on the main profile; publishing stays gated behind VIP Premium)."
 
+## NEW FEATURE (2026-09-16): Global location on signup + distance on browse
+## - Signup: choose country/city globally OR press "Detect my location" (browser geolocation + reverse geocode) to auto-fill and store lat/lng
+## - Browse & ProfileView: show how far each user is from the viewer in km/m (haversine); raw coords never exposed
+
 backend:
+  - task: "Register accepts + stores lat/lng; /profiles and /profiles/{id} compute distance_km via haversine and strip raw lat/lng"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Added lat/lng to RegisterReq and ProfileUpdate; store lat/lng on register; added haversine_km() helper; list_profiles and profile_detail now add distance_km (km from viewer) and remove raw lat/lng from payload. Manual curl verified: Paris user shows distance_km=343.56 to a London viewer and no lat/lng leaks."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL TESTS PASSED (19/19). Created comprehensive test suite backend_test_location_distance.py covering all 5 scenarios from review request. SCENARIO 1 - REGISTER WITH COORDS: Alice (Paris, 48.8566, 2.3522) and Bob (London, 51.5074, -0.1278) successfully registered with lat/lng coordinates. Registration returns token and user object. ✅ SCENARIO 2 - DISTANCE ON BROWSE: Bob browsing with gender=female filter sees Alice with distance_km=343.56 km (correct Paris-London great-circle distance). Raw lat/lng are properly stripped from response (privacy protected). ✅ SCENARIO 3 - DISTANCE ON DETAIL: Bob viewing Alice's profile detail (GET /api/profiles/{alice_id}) shows distance_km=343.56 km. Raw lat/lng are properly stripped (privacy protected). ✅ SCENARIO 4 - NO-COORDS GRACEFUL: Charlie registered successfully WITHOUT lat/lng coordinates (regression test). Charlie (no coords) can browse profiles without crash. When viewer has no coords, distance_km is correctly absent from results (no crash). When Bob (has coords) views Charlie (no coords), distance_km is correctly absent (no crash). ✅ SCENARIO 5 - REGRESSION: Register without lat/lng still works. Gender filter (gender=female) returns 200. Age filter (min_age=25, max_age=35) returns 200. All existing filters working correctly. Distance calculation is accurate (343.56 km for Paris-London), privacy is protected (no raw coordinates exposed), graceful handling when coords are missing (no crashes, distance_km simply absent). Feature is production-ready."
+
+
   - task: "Separate VIP profile — save independent fields (age/city/country/gender/bio/show_on_main) + stable public_id"
     implemented: true
     working: true
@@ -191,8 +211,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.2"
-  test_sequence: 3
+  version: "2.3"
+  test_sequence: 4
   run_ui: false
 
 test_plan:
@@ -234,3 +254,17 @@ agent_communication:
     -message: "Test Premium-lite backend: (1) POST /premium/buy-with-coins {tier:premium_lite} debits 150 coins and sets premium_lite_until ~30d; auth/me returns is_premium_lite true, is_premium false, is_vip false. (2) Lite user gets baseline perks: unlimited likes (no LIKE_LIMIT), advanced filters allowed on GET /profiles (no 403 PREMIUM_REQUIRED), GET /likes/received returns premium:true with full liker details. (3) Lite user must NOT access VIP content: GET /vip/profile of a published VIP owner returns locked:true for lite viewer. (4) POST /premium/gift {tier:premium_lite} debits 150 and sets recipient premium_lite_until. (5) /meta exposes premium_lite {amount:14.99} and premium_lite_coins:150. (6) Insufficient coins path errors. (7) Regression: premium & vip buy-with-coins/gift still work (300/500 coins) and vip still unlocks VIP content."
     -agent: "testing"
     -message: "✅ ALL PREMIUM-LITE TESTS PASSED (42/42). Comprehensive testing completed for all 7 scenarios. Key findings: (1) Self-buy working perfectly - 150 coins debited, premium_lite_until set ~30 days ahead, correct tier flags. (2) Baseline perks working - unlimited likes (no LIKE_LIMIT), advanced filters allowed (no PREMIUM_REQUIRED), see who liked you returns full details. (3) VIP content access correctly restricted - lite users get locked=true, premium/vip users get locked=false. (4) Gift functionality working - 150 coins debited from gifter, recipient receives premium_lite. (5) Meta/prices endpoints returning correct values. (6) Insufficient coins error handling working. (7) No regressions - premium and vip tiers still work correctly. Premium-lite tier is production-ready."
+
+## FEATURE: Global location on signup + distance on browse (2026-09-16)
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "New location feature to test on backend: (1) POST /auth/register now accepts optional lat/lng floats and stores them on the user. (2) GET /profiles as a viewer who has lat/lng returns each profile with a numeric distance_km field (great-circle km) and MUST NOT include raw lat/lng in the response. (3) GET /profiles/{id} same behaviour. (4) If viewer OR target has no coords, distance_km is simply absent (no crash). (5) Regression: registering WITHOUT lat/lng still works and profiles list still returns normally. Suggested check: register A at Paris (48.8566,2.3522) and B at London (51.5074,-0.1278); B browsing should see A with distance_km ≈ 343-344 and no lat/lng keys."
+    -agent: "testing"
+    -message: "✅ ALL LOCATION + DISTANCE TESTS PASSED (19/19). Created comprehensive test suite backend_test_location_distance.py covering all 5 scenarios from review request. Key findings: (1) REGISTER WITH COORDS: Alice (Paris, 48.8566, 2.3522) and Bob (London, 51.5074, -0.1278) successfully registered with lat/lng. ✅ (2) DISTANCE ON BROWSE: Bob browsing sees Alice with distance_km=343.56 km (correct Paris-London distance). Raw lat/lng properly stripped (privacy protected). ✅ (3) DISTANCE ON DETAIL: Bob viewing Alice's detail shows distance_km=343.56 km. Raw lat/lng properly stripped. ✅ (4) NO-COORDS GRACEFUL: Charlie registered without coords. Charlie (no coords) can browse without crash. When viewer has no coords, distance_km correctly absent. When Bob (has coords) views Charlie (no coords), distance_km correctly absent. No crashes. ✅ (5) REGRESSION: Register without lat/lng works. Gender and age filters work correctly. ✅ Distance calculation accurate (343.56 km), privacy protected (no raw coordinates exposed), graceful handling when coords missing. Feature is production-ready."
+

@@ -13,7 +13,8 @@ import { LANGUAGES, ZODIAC_EMOJI } from "../lib/i18n";
 import SpinWheel from "../components/SpinWheel";
 import CountrySelect from "../components/CountrySelect";
 import CityField from "../components/CityField";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, MapPin, Loader2 } from "lucide-react";
+import { detectLocation } from "../lib/geolocate";
 
 const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -47,8 +48,9 @@ export default function Auth() {
   const nav = useNavigate();
   const [sp] = useSearchParams();
   const [mode, setMode] = useState(sp.get("register") ? "register" : "login");
-  const [f, setF] = useState({ email: "", password: "", name: "", age: 25, gender: "female", interested_in: "male", orientation: "straight", city: "", country: "", bio: "", referral_code: sp.get("ref") || "", language: lang, birth_day: "", birth_month: "", birth_year: "" });
+  const [f, setF] = useState({ email: "", password: "", name: "", age: 25, gender: "female", interested_in: "male", orientation: "straight", city: "", country: "", bio: "", referral_code: sp.get("ref") || "", language: lang, birth_day: "", birth_month: "", birth_year: "", lat: null, lng: null });
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [pendingSpin] = useState(() => {
@@ -62,6 +64,19 @@ export default function Auth() {
     setF(nf);
   };
   const zodiacPreview = calcZodiac(f.birth_month ? parseInt(f.birth_month) : null, f.birth_day ? parseInt(f.birth_day) : null);
+
+  const detectMyLocation = async () => {
+    setLocating(true);
+    try {
+      const { lat, lng, city, country } = await detectLocation(lang);
+      setF((prev) => ({ ...prev, lat, lng, city: city || prev.city, country: country || prev.country }));
+      toast.success(t("location_detected", lang) + (city ? ` · ${city}${country ? ", " + country : ""}` : ""));
+    } catch {
+      toast.error(t("location_failed", lang));
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -189,6 +204,21 @@ export default function Auth() {
                 <div><Label className="text-xs text-slate-400">{t("city", lang)}</Label>
                   <CityField testid="auth-city-input" required value={f.city} onChange={v => setF({ ...f, city: v })} lang={lang} /></div>
               </div>
+              <button
+                type="button"
+                data-testid="auth-detect-location-button"
+                onClick={detectMyLocation}
+                disabled={locating}
+                className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-200 text-sm hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+              >
+                {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
+                {locating ? t("detecting_location", lang) : t("detect_location", lang)}
+              </button>
+              {f.lat != null && f.lng != null && (
+                <p data-testid="auth-location-coords" className="text-[11px] text-emerald-300/80 flex items-center gap-1 -mt-1">
+                  <MapPin size={11} /> {f.lat.toFixed(3)}, {f.lng.toFixed(3)}
+                </p>
+              )}
               <div><Label className="text-xs text-slate-400">{t("bio", lang)}</Label>
                 <Textarea data-testid="auth-bio-input" rows={2} value={f.bio} onChange={e => setF({ ...f, bio: e.target.value })} className="bg-white/5 border-white/10 mt-1" /></div>
               <div><Label className="text-xs text-slate-400">{t("referral_optional", lang)}</Label>

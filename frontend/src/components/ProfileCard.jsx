@@ -7,6 +7,7 @@ import { t, ZODIAC_EMOJI } from "../lib/i18n";
 import { fileUrl } from "../lib/api";
 import { optLabel } from "./ProfileDetailsForm";
 import { presence } from "../lib/presence";
+import { formatDistance } from "../lib/geolocate";
 
 const FALLBACKS = [
   "https://images.unsplash.com/photo-1544005313-94ddf0286df2?crop=entropy&cs=srgb&fm=jpg&q=85",
@@ -65,6 +66,11 @@ export default function ProfileCard({ p, onLike, onGift, onVideo, onDate, onMess
             <div>
               <h3 className="font-serif-luxe text-2xl leading-tight">{p.name}, {p.age}</h3>
               <p className="text-xs text-slate-300 flex items-center gap-1 mt-0.5"><MapPin size={11} /> {p.city}, {p.country}</p>
+              {p.distance_km != null && (
+                <p data-testid={`profile-card-distance-${p.id}`} className="text-[11px] text-sky-300 flex items-center gap-1 mt-0.5">
+                  <MapPin size={10} /> {formatDistance(p.distance_km, t, lang)}
+                </p>
+              )}
               {p.zodiac && (
                 <span data-testid={`profile-card-zodiac-${p.id}`} className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/30 text-[10px] text-violet-200">
                   <span aria-hidden="true">{ZODIAC_EMOJI[p.zodiac] || "✨"}</span> {t(`zod_${p.zodiac}`, lang)}

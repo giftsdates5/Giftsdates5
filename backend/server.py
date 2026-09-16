@@ -408,6 +408,8 @@ class RegisterReq(BaseModel):
     birth_year: Optional[int] = None
     birth_month: Optional[int] = None
     birth_day: Optional[int] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 class LoginReq(BaseModel):
     email: EmailStr
@@ -422,6 +424,8 @@ class ProfileUpdate(BaseModel):
     bio: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     interests: Optional[List[str]] = None
     photos: Optional[List[str]] = None
     language: Optional[str] = None
@@ -788,6 +792,7 @@ async def register(req: RegisterReq):
         "name": req.name, "age": age, "gender": req.gender,
         "birth_date": birth_date, "zodiac": zodiac,
         "interested_in": req.interested_in, "orientation": req.orientation or "straight", "city": req.city, "country": req.country,
+        "lat": req.lat, "lng": req.lng,
         "bio": req.bio or "", "interests": [], "photos": [], "language": req.language or "en",
         "coins": 0,  # no welcome bonus (Spin & Win only)
         "escrow": 0.0, "withdrawable": 0.0,
@@ -1083,6 +1088,20 @@ async def download(path: str, authorization: Optional[str] = Header(None), auth:
     return Response(content=data, media_type=rec.get("content_type") or ct)
 
 # ---------- Profiles / Search ----------
+def haversine_km(lat1, lng1, lat2, lng2):
+    """Great-circle distance in km between two lat/lng points, or None if any missing."""
+    if lat1 is None or lng1 is None or lat2 is None or lng2 is None:
+        return None
+    try:
+        from math import radians, sin, cos, asin, sqrt
+        rlat1, rlat2 = radians(float(lat1)), radians(float(lat2))
+        dlat = rlat2 - rlat1
+        dlng = radians(float(lng2) - float(lng1))
+        a = sin(dlat / 2) ** 2 + cos(rlat1) * cos(rlat2) * sin(dlng / 2) ** 2
+        return round(2 * 6371.0088 * asin(sqrt(a)), 2)
+    except Exception:
+        return None
+
 @api.get("/profiles")
 async def list_profiles(
     q: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
@@ -1162,6 +1181,14 @@ async def list_profiles(
             v = p.get("vip") or {}
             if v.get("post_mode") == "separate" and not v.get("show_on_main", True):
                 p["is_vip"] = False
+    # Distance from the viewer to each profile (km). Exact coords are never exposed.
+    vlat, vlng = user.get("lat"), user.get("lng")
+    for p in results:
+        d = haversine_km(vlat, vlng, p.get("lat"), p.get("lng"))
+        if d is not None:
+            p["distance_km"] = d
+        p.pop("lat", None)
+        p.pop("lng", None)
     return results
 
 def _vip_listing_card(p: dict) -> dict:
@@ -1219,6 +1246,11 @@ async def profile_detail(pid: str, user=Depends(get_current_user)):
         g = await db.users.find_one({"id": a["_id"]}, {"_id": 0, "id": 1, "name": 1, "photos": 1})
         if g: top.append({"id": g["id"], "name": g["name"], "photo": (g.get("photos") or [None])[0], "total": a["total"], "count": a["count"]})
     p["top_givers"] = top
+    d = haversine_km(user.get("lat"), user.get("lng"), p.get("lat"), p.get("lng"))
+    if d is not None:
+        p["distance_km"] = d
+    p.pop("lat", None)
+    p.pop("lng", None)
     return p
 
 # ---------- Likes / Matches ----------

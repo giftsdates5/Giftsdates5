@@ -13,7 +13,7 @@ import VideoCallModal from "../components/VideoCallModal";
 import DateBookingModal from "../components/DateBookingModal";
 import InviteDateModal from "../components/InviteDateModal";
 import FeedBar from "../components/FeedBar";
-import { Search, SlidersHorizontal, ChevronDown, Crown, Lock, Navigation, Plane, X } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronDown, Crown, Lock, Navigation, Plane, X, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { INTENTS, KIDS, HABITS, RELIGIONS, INCOMES, BUST, SIZES, GENDERS, ORIENTATIONS, optLabel } from "../components/ProfileDetailsForm";
 import { VIP_CATEGORIES, catTitle } from "../lib/vipCatalog";
@@ -58,14 +58,14 @@ function Toggle({ testid, label, checked, onChange }) {
 }
 
 export default function Browse() {
-  const { lang, user } = useApp();
+  const { lang, user, refreshUser } = useApp();
   const isPremium = user?.premium_until && new Date(user.premium_until) > new Date();
   const hasCoords = user?.lat != null && user?.lng != null;
   const isVip = user?.vip_until && new Date(user.vip_until) > new Date();
   const nav = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: "", city: "", country: "", gender: "all", min_age: 18, max_age: 60, max_distance: "", sort: "", ...EXTRA_DEFAULT });
+  const [filters, setFilters] = useState({ q: "", city: "", country: "", gender: "all", min_age: 18, max_age: 60, max_distance: "", sort: "", online_nearby: false, ...EXTRA_DEFAULT });
   const [showMore, setShowMore] = useState(false);
   const [target, setTarget] = useState(null);
   const [modal, setModal] = useState(null);
@@ -89,6 +89,23 @@ export default function Browse() {
     finally { setTravelBusy(false); }
   };
   const clearTravel = () => { setTravel(null); setTravelInput(""); };
+
+  const passport = user?.passport_cities || [];
+  const savePassport = async (list) => {
+    try { await api.patch("/auth/me", { passport_cities: list }); await refreshUser(); }
+    catch { toast.error(t("failed", lang)); }
+  };
+  const applyPassport = (c) => { setTravel({ lat: c.lat, lng: c.lng, city: c.city }); toast.success(t("travel_active", lang).replace("{city}", c.city)); };
+  const saveCurrentTravel = async () => {
+    if (!travel) return;
+    if (passport.some(c => c.city.toLowerCase() === travel.city.toLowerCase())) return;
+    await savePassport([...passport, { city: travel.city, lat: travel.lat, lng: travel.lng }].slice(0, 8));
+    toast.success(t("passport_saved", lang));
+  };
+  const removePassport = async (city) => {
+    await savePassport(passport.filter(c => c.city !== city));
+    toast.success(t("passport_removed", lang));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +195,16 @@ export default function Browse() {
           >
             <Navigation size={13} /> {t("sort_nearby", lang)}
           </button>
+          <button
+            type="button"
+            data-testid="profile-online-nearby-toggle"
+            disabled={!hasCoords && !travel}
+            title={(!hasCoords && !travel) ? t("location_needed_for_distance", lang) : undefined}
+            onClick={() => setFilters(f => ({ ...f, online_nearby: !f.online_nearby }))}
+            className={`h-[38px] mt-auto inline-flex items-center gap-1.5 px-3 rounded-lg text-xs border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${filters.online_nearby ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-200" : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${filters.online_nearby ? "bg-emerald-400" : "bg-emerald-400/60"}`} /> {t("online_nearby", lang)}
+          </button>
           <Button data-testid="profile-search-submit-button" onClick={load} className="rose-btn text-white border-0"><SlidersHorizontal size={14} className="me-1"/> {t("filters", lang)}</Button>
           <label className="flex items-center gap-2 text-xs text-red-200 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 cursor-pointer h-[38px]" data-testid="main-vip-only-wrap">
             <Switch data-testid="main-filter-vip-only" checked={filters.vip_only} onCheckedChange={v => setFilters({ ...filters, vip_only: v })} /> ♛ {t("vip_only", lang)}
@@ -198,6 +225,11 @@ export default function Browse() {
               <span data-testid="travel-mode-active" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/20 border border-sky-500/50 text-sky-100 text-xs">
                 <Navigation size={12} /> {t("travel_active", lang).replace("{city}", travel.city)}
               </span>
+              {!passport.some(c => c.city.toLowerCase() === travel.city.toLowerCase()) && (
+                <button data-testid="travel-mode-save" type="button" onClick={saveCurrentTravel} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 transition-colors">
+                  <Star size={12} /> {t("passport_save", lang)}
+                </button>
+              )}
               <button data-testid="travel-mode-clear" type="button" onClick={clearTravel} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors">
                 <X size={12} /> {t("travel_clear", lang)}
               </button>
@@ -216,6 +248,17 @@ export default function Browse() {
                 {travelBusy ? "…" : t("travel_set", lang)}
               </Button>
               <span className="text-[11px] text-slate-400 hidden sm:inline">{t("travel_mode_hint", lang)}</span>
+            </div>
+          )}
+          {passport.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto sm:ms-auto" data-testid="passport-cities">
+              <span className="text-[11px] text-slate-400 flex items-center gap-1"><Star size={11} className="text-amber-300" /> {t("passport_cities", lang)}:</span>
+              {passport.map(c => (
+                <span key={c.city} className={`inline-flex items-center gap-1 rounded-full text-xs border transition-colors ${travel && travel.city === c.city ? "bg-sky-500/25 border-sky-500/60 text-sky-100" : "bg-white/5 border-white/10 text-slate-200"}`}>
+                  <button data-testid={`passport-apply-${c.city}`} type="button" onClick={() => applyPassport(c)} className="ps-2.5 py-1 hover:text-sky-200 transition-colors">{c.city}</button>
+                  <button data-testid={`passport-remove-${c.city}`} type="button" onClick={() => removePassport(c.city)} className="pe-2 ps-0.5 py-1 text-slate-400 hover:text-rose-300 transition-colors"><X size={11} /></button>
+                </span>
+              ))}
             </div>
           )}
         </div>

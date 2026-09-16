@@ -427,6 +427,7 @@ class ProfileUpdate(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     hide_distance: Optional[bool] = None
+    passport_cities: Optional[List[dict]] = None
     interests: Optional[List[str]] = None
     photos: Optional[List[str]] = None
     language: Optional[str] = None
@@ -839,6 +840,15 @@ async def update_me(patch: ProfileUpdate, user=Depends(get_current_user)):
     if "video_rate" in upd:
         mn = (await get_settings())["video_rate"]
         if upd["video_rate"] < mn: raise HTTPException(400, f"Video rate must be at least {mn} coins/min")
+    if "passport_cities" in upd:
+        cleaned = []
+        for c in (upd["passport_cities"] or [])[:8]:
+            try:
+                if isinstance(c, dict) and c.get("city") and c.get("lat") is not None and c.get("lng") is not None:
+                    cleaned.append({"city": str(c["city"])[:80], "lat": float(c["lat"]), "lng": float(c["lng"])})
+            except Exception:
+                continue
+        upd["passport_cities"] = cleaned
     if "availability" in upd:
         upd["availability"] = sorted({d[:10] for d in upd["availability"] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d[:10])})
     def _win_ok(w): return isinstance(w, dict) and re.fullmatch(r"\d{2}:\d{2}", str(w.get("from", ""))) and re.fullmatch(r"\d{2}:\d{2}", str(w.get("to", ""))) and w["from"] < w["to"]
@@ -1124,6 +1134,7 @@ async def list_profiles(
     vip_categories: Optional[str] = None, vip_min_price: Optional[int] = None, vip_max_price: Optional[int] = None, vip_date: Optional[str] = None,
     max_distance: Optional[int] = None, sort: Optional[str] = None,
     origin_lat: Optional[float] = None, origin_lng: Optional[float] = None,
+    online_nearby: bool = False,
     limit: int = 40, user=Depends(get_current_user)
 ):
     conds = [{"id": {"$ne": user["id"]}}, {"age": {"$gte": min_age, "$lte": max_age}}]
@@ -1156,6 +1167,7 @@ async def list_profiles(
     if with_photos: conds.append({"photos.0": {"$exists": True}})
     if verified_only: conds.append({"verified": True})
     if online_now: conds.append({"last_seen": {"$gt": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()}})
+    if online_nearby: conds.append({"last_seen": {"$gt": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()}})
     now_iso = datetime.now(timezone.utc).isoformat()
     if premium_only: conds.append({"premium_until": {"$gt": now_iso}})
     if vip_filter: conds.append({"vip_until": {"$gt": now_iso}}); conds.append({"vip.published": {"$ne": False}})
@@ -1202,11 +1214,13 @@ async def list_profiles(
         p.pop("lat", None)
         p.pop("lng", None)
         p.pop("hide_distance", None)
-    # Radius filter: only keep profiles within max_distance km (requires origin + target coords)
-    if max_distance and vlat is not None and vlng is not None:
-        results = [p for p in results if p.get("distance_km") is not None and p["distance_km"] <= max_distance]
+    # Radius filter: only keep profiles within max_distance km (requires origin + target coords).
+    # Online-nearby applies a sensible default radius when the member hasn't picked one.
+    eff_max = max_distance or (100 if online_nearby else None)
+    if eff_max and vlat is not None and vlng is not None:
+        results = [p for p in results if p.get("distance_km") is not None and p["distance_km"] <= eff_max]
     # Nearby sort: closest first (profiles without a distance go last)
-    if sort == "nearby" and vlat is not None and vlng is not None:
+    if (sort == "nearby" or online_nearby) and vlat is not None and vlng is not None:
         results.sort(key=lambda p: p.get("distance_km") if p.get("distance_km") is not None else float("inf"))
     return results
 
